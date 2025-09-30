@@ -1,0 +1,22 @@
+{
+  "name": "data-generator",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@hashgraph/sdk": "^2.73.2",
+    "aws-sdk": "^2.1692.0",
+    "body-parser": "^2.2.0",
+    "csv-parser": "^3.2.0",
+    "dotenv": "^17.2.2",
+    "express": "^5.1.0",
+    "sqlite3": "^5.1.7"
+  }
+}
