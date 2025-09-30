@@ -33,6 +33,17 @@ db.serialize(() => {
   )`);
 });
 
+// Create accounts table if not exists
+db.serialize(() => {
+  db.run(`CREATE TABLE IF NOT EXISTS accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    accountId TEXT UNIQUE,
+    publicKey TEXT,
+    privateKey TEXT
+  )`);
+});
+
+
 const app = express();
 const port = 3000;
 
@@ -111,17 +122,16 @@ app.get("/accounts", (req, res) => {
 
 
 
-// Create a Hedera testnet account
+// Create a Hedera testnet account and store in DB
 app.get("/accounts/create", async (req, res) => {
   try {
     // Load your operator credentials
-    const operatorId  = process.env.MY_ACCOUNT_ID;
+    const operatorId = process.env.MY_ACCOUNT_ID;
     const operatorKey = process.env.MY_PRIVATE_KEY;
 
     // Initialize your testnet client and set operator
-    const client = Client.forTestnet()
-        .setOperator(operatorId, operatorKey);
-    
+    const client = Client.forTestnet().setOperator(operatorId, operatorKey);
+
     // Generate new private/public key pair
     const newPrivateKey = await PrivateKey.generateED25519();
     const newPublicKey = newPrivateKey.publicKey;
@@ -136,15 +146,40 @@ app.get("/accounts/create", async (req, res) => {
 
     const newAccountId = receipt.accountId.toString();
 
-    res.json({
-      accountId: newAccountId,
-      publicKey: newPublicKey.toString(),
-      privateKey: newPrivateKey.toString(),
-    });
+    // Insert into SQLite DB
+    db.run(
+      `INSERT INTO accounts (accountId, publicKey, privateKey)
+       VALUES (?, ?, ?)`,
+      [newAccountId, newPublicKey.toString(), newPrivateKey.toString()],
+      function (err) {
+        if (err) {
+          console.error("DB insert error:", err.message);
+          return res.status(500).json({ error: "Failed to save account in DB" });
+        }
+
+        res.json({
+          id: this.lastID,
+          accountId: newAccountId,
+          publicKey: newPublicKey.toString(),
+          privateKey: newPrivateKey.toString(),
+        });
+      }
+    );
   } catch (error) {
     console.error("Error creating account:", error);
     res.status(500).json({ error: "Failed to create Hedera account" });
   }
+});
+
+// query all accounts
+app.get("/accounts/list", (req, res) => {
+  db.all("SELECT * FROM accounts", [], (err, rows) => {
+    if (err) {
+      console.error("DB query error:", err.message);
+      return res.status(500).json({ error: "Failed to fetch accounts" });
+    }
+    res.json({ count: rows.length, accounts: rows });
+  });
 });
 
 // Tokens
@@ -271,7 +306,7 @@ app.get("/tokens/buy", (req, res) => {
     UPDATE tokens
     SET for_sale = 0,
         account = ?
-    WHERE tokenId = ? AND for_sale = 1
+    WHERE tokenId = ? AND for_sale = "1"
   `;
 
   db.run(query, [buyerAccount, tokenId], function(err) {

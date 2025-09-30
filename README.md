@@ -7,29 +7,31 @@ This repository contains scripts and an API to simulate **distribution and usage
 
 ## Table of Contents
 
-- [Project Overview](#project-overview)
-- [Distributions Data](#distributions-data)
-- [Usage Data](#usage-data)
-- [API](#api)
-  - [Accounts](#accounts)
-  - [Tokens](#tokens)
-- [Requirements](#requirements)
-- [Setup](#setup)
-- [Running the Scripts](#running-the-scripts)
-- [License](#license)
+* [Project Overview](#project-overview)
+* [Distributions Data](#distributions-data)
+* [Usage Data](#usage-data)
+* [API](#api)
+
+  * [General](#general)
+  * [Accounts](#accounts)
+  * [Tokens](#tokens)
+* [Requirements](#requirements)
+* [Setup](#setup)
+* [Running the Scripts](#running-the-scripts)
+* [License](#license)
 
 ---
 
 ## Project Overview
 
-UpEnergy distributes clean cooking technology and captures baseline and usage data to compute avoided CO₂e.  
+UpEnergy distributes clean cooking technology and captures baseline and usage data to compute avoided CO₂e.
 
 This project demonstrates a **blockchain-backed solution** using Hedera:
 
-1. **Generate distribution data** with locations, serials, and contact information.  
-2. **Simulate usage data** (electricity consumption) for each device.  
-3. **Create digital tokens** representing a claim on future carbon credits.  
-4. **Trade tokens** in a simple marketplace via an API.  
+1. **Generate distribution data** with locations, serials, and contact information.
+2. **Simulate usage data** (electricity consumption) for each device.
+3. **Create digital tokens** representing a claim on future carbon credits.
+4. **Trade tokens** in a simple marketplace via an API.
 
 Tokens are **stored in SQLite**, while raw and processed data can be stored on **AWS S3**.
 
@@ -47,7 +49,7 @@ import datetime
 import boto3
 from io import StringIO
 import time
-````
+```
 
 * Generates fake users across multiple African countries, regions, districts, and villages.
 * Generates unique device serial numbers and phone numbers.
@@ -80,56 +82,160 @@ Usage data simulates high-frequency electricity readings from devices:
 ## API
 
 The API is built with **Node.js (Express)** and interacts with **Hedera Testnet** and **SQLite**.
+All endpoints are prefixed with `http://localhost:3000`.
+
+---
+
+### General
+
+#### **GET /**
+
+Returns a welcome message to verify the API is running.
+
+**Example Response:**
+
+```json
+{ "message": "Welcome to the API 🚀" }
+```
+
+---
 
 ### Accounts
 
-* **GET /**
-  Welcome message.
+Endpoints for managing **Hedera accounts**.
 
-* **GET /accounts**
-  List all accounts (mock data).
+#### **GET /accounts**
 
-* **GET /accounts/create**
-  Create a Hedera Testnet account. Returns:
+Returns mock in-memory accounts (mainly for testing/demo).
 
-  ```json
-  {
-    "accountId": "0.0.xxxxx",
-    "publicKey": "...",
-    "privateKey": "..."
-  }
-  ```
+---
+
+#### **GET /accounts/create**
+
+Creates a new Hedera Testnet account and stores it in SQLite.
+Each account is created with 10 test HBAR and returns its keys.
+
+**Response:**
+
+```json
+{
+  "id": 1,
+  "accountId": "0.0.34567",
+  "publicKey": "302a300506032b6570032100...",
+  "privateKey": "302e020100300506032b6570..."
+}
+```
+
+---
+
+#### **GET /accounts/list**
+
+Lists all accounts that have been created and saved in the database.
+
+**Response:**
+
+```json
+{
+  "count": 2,
+  "accounts": [
+    {
+      "id": 1,
+      "accountId": "0.0.34567",
+      "publicKey": "302a300506032b6570032100...",
+      "privateKey": "302e020100300506032b6570..."
+    },
+    {
+      "id": 2,
+      "accountId": "0.0.67890",
+      "publicKey": "302a300506032b6570032100...",
+      "privateKey": "302e020100300506032b6570..."
+    }
+  ]
+}
+```
+
+---
 
 ### Tokens
 
-* **GET /tokens/create**
-  Read distributions from S3 and generate tokens. Tokens are inserted into SQLite.
+Endpoints for generating, listing, and trading tokens.
 
-* **GET /tokens/upenergy**
-  Returns all tokens stored in SQLite.
+#### **GET /tokens/create**
 
-* **GET /tokens/market**
-  Returns all tokens currently listed for sale (`for_sale = 1`).
+Reads distribution data from S3 and creates tokens.
+Each token is tied to a device serial and stored in SQLite.
 
-* **GET /tokens/sell?tokenId=TOKEN-ID**
-  Mark a token as for sale. Returns:
+**Response:**
 
-  ```json
-  {
-    "tokenId": "TOKEN-XYZ",
-    "status": "Token is now listed for sale"
-  }
-  ```
+```json
+{
+  "message": "✅ Tokens created and stored in SQLite",
+  "count": 10,
+  "tokens": [ { "tokenId": "TOKEN-1234", ... } ]
+}
+```
 
-* **GET /tokens/buy?tokenId=TOKEN-ID&buyerAccount=ACCOUNT**
-  Buy a token: assigns it to the buyer and removes it from sale. Returns:
+---
 
-  ```json
-  {
-    "tokenId": "TOKEN-XYZ",
-    "status": "Token has been bought by account 0.0.1234"
-  }
-  ```
+#### **GET /tokens/upenergy**
+
+Lists all tokens created by UpEnergy (from SQLite).
+
+**Response:**
+
+```json
+{
+  "count": 50,
+  "tokens": [ { "tokenId": "TOKEN-1234", ... } ]
+}
+```
+
+---
+
+#### **GET /tokens/market**
+
+Lists all tokens currently available for sale (`for_sale = 1`).
+
+**Response:**
+
+```json
+{
+  "count": 3,
+  "tokens": [ { "tokenId": "TOKEN-9876", "for_sale": 1, ... } ]
+}
+```
+
+---
+
+#### **GET /tokens/sell?tokenId=TOKEN-ID**
+
+Marks a token as **for sale**.
+`tokenId` is required.
+
+**Response:**
+
+```json
+{
+  "tokenId": "TOKEN-XYZ",
+  "status": "Token is now listed for sale"
+}
+```
+
+---
+
+#### **GET /tokens/buy?tokenId=TOKEN-ID&buyerAccount=ACCOUNT**
+
+Allows a buyer account to purchase a token.
+The token is reassigned to the buyer and removed from sale.
+
+**Response:**
+
+```json
+{
+  "tokenId": "TOKEN-XYZ",
+  "status": "Token has been bought by account 0.0.1234"
+}
+```
 
 ---
 
@@ -205,4 +311,3 @@ API runs on: `http://localhost:3000`
 ## License
 
 @UpEnergy
-

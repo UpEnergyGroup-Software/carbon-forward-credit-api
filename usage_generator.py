@@ -26,7 +26,7 @@ def read_s3_folder(bucket_name, prefix):
         obj = s3_client.get_object(Bucket=bucket_name, Key=file_key)
         df = pd.read_csv(obj['Body'])
         df_list.append(df)
-    
+
     if df_list:
         return pd.concat(df_list, ignore_index=True)
     else:
@@ -43,7 +43,7 @@ def write_df_to_s3(df, bucket_name, key):
         Key=key,
         Body=csv_buffer.getvalue()
     )
-    print(f"✅ DataFrame written to s3://{bucket_name}/{key}")
+    print(f" DataFrame written to s3://{bucket_name}/{key}")
 
 # ---------- USAGE DATA GENERATOR ----------
 def generate_high_freq_usage(df, past_hours=1, interval_seconds=5):
