@@ -363,6 +363,7 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-/venv
-
-.env
+*/venv
+*venv
+*.env
+*/.env
