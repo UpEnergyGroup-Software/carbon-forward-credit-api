@@ -1,3 +1,6 @@
+console.clear();
+require("dotenv").config();
+
 // server.js
 const express = require("express");
 const bodyParser = require("body-parser");
@@ -9,12 +12,37 @@ const {
   PrivateKey,
   AccountCreateTransaction,
   Hbar,
+  CustomRoyaltyFee,
+  TokenCreateTransaction,
+  TokenType,
+  TokenSupplyType,
+  TokenMintTransaction,
+  AccountId,
+  CustomFixedFee
 } = require("@hashgraph/sdk");
+
+// Configure accounts and client, and generate needed keys
+const operatorId = process.env.OPERATOR_ID;
+const operatorkey = PrivateKey.fromString(process.env.OPERATOR_KEY);
+const treasuryId = process.env.MY_ACCOUNT_ID;
+const treasurykey = PrivateKey.fromString(process.env.MY_PRIVATE_KEY);
+const aliceld = AccountId.fromString(process.env.ALICE_ID);
+const alicekey = PrivateKey.fromString(process.env.ALICE_PVKEY);
+const bobId = AccountId.fromString(process.env.BOB_ID);
+const bobkey = PrivateKey.fromString(process.env.BOB_PVKEY);
+
+const supplykey = PrivateKey.generate();
+const adminkey = PrivateKey.generate();
+
+
 
 require("dotenv").config();
 const sqlite3 = require("sqlite3").verbose();
 // Initialize SQLite DB
 const db = new sqlite3.Database("./tokens.db");
+db.serialize(() => {
+  db.run(`DROP TABLE IF EXISTS tokens;`);
+});
 // Create table if not exists
 db.serialize(() => {
   db.run(`CREATE TABLE IF NOT EXISTS tokens (
@@ -49,18 +77,8 @@ const port = 3000;
 
 app.use(bodyParser.json());
 
-// Mock user data
-let tokens = [
-  { id: 1, serial: "122QQwwweew" },
-  { id: 2, serial: "423dfgsdfgs" },
-];
 
-let users = [
-  { id: 1, name: "Dalmas" },
-  { id: 2, name: "Alice" },
-];
-
-async function environmentSetup() {
+async function clientSetup() {
   // Grab your Hedera testnet account ID and private key from your env file
   const myAccountId = process.env.MY_ACCOUNT_ID;
   const myPrivateKeyStr = process.env.MY_PRIVATE_KEY;
@@ -86,6 +104,7 @@ async function environmentSetup() {
   return client; // return the client so you can reuse it
 }
 
+const client = clientSetup();
 
 
 // --------
@@ -112,15 +131,10 @@ app.post("/users", (req, res) => {
   res.status(201).json(newUser);
 });
 
-
-
 // accounts
 app.get("/accounts", (req, res) => {
   res.json(tokens);
 });
-
-
-
 
 // Create a Hedera testnet account and store in DB
 app.get("/accounts/create", async (req, res) => {
@@ -194,7 +208,17 @@ const s3 = new AWS.S3({
 app.get("/tokens/create", async (req, res) => {
   try {
     const bucket = process.env.S3_BUCKET;
-    const key = process.env.S3_KEY; // e.g. "distributions.csv"
+    const key = process.env.S3_KEY;
+
+    // ✅ Get a fully initialized Hedera client
+    const client = await clientSetup();
+
+    // ✅ Define custom royalty + fallback fee
+    const nftCustomFee = new CustomRoyaltyFee()
+      .setNumerator(5)
+      .setDenominator(10)
+      .setFeeCollectorAccountId(treasuryId)
+      .setFallbackFee(new CustomFixedFee().setHbarAmount(new Hbar(200)));
 
     const createdTokens = [];
 
@@ -203,47 +227,82 @@ app.get("/tokens/create", async (req, res) => {
       .createReadStream()
       .pipe(csv());
 
-    s3Stream.on("data", (row) => {
-      // Generate token object per row
-      const token = {
-        id: row.id,
-        name: row.name,
-        region: row.region,
-        district: row.district,
-        village: row.village,
-        phone: row.phone,
-        serial: row.serial,
-        country: row.country,
-        distribution_date: row.distribution_date,
-        tokenId: `TOKEN-${row.serial}`, // unique token id
-      };
+    s3Stream.on("data", async (row) => {
+      try {
+        const nftCreate = new TokenCreateTransaction()
+              .setTokenName("UpEnergy Forward Credit")
+              .setTokenSymbol("UPEFC")
+              .setTokenType(TokenType.NonFungibleUnique)
+              .setDecimals(0)
+              .setInitialSupply(0)
+              .setTreasuryAccountId(treasuryId)
+              .setSupplyType(TokenSupplyType.Infinite)
+              .setAdminKey(treasurykey.publicKey) // Admin is treasury
+              .setSupplyKey(treasurykey.publicKey) // Treasury controls mint
+              .setMaxTransactionFee(new Hbar(20))
+              .freezeWith(client);
 
-      // Save to in-memory list
-      createdTokens.push(token);
+        const nftCreateSign = await nftCreate.sign(treasurykey);
+        const nftCreateSubmit = await nftCreateSign.execute(client);
+        const nftCreateRx = await nftCreateSubmit.getReceipt(client);
+        const nftTokenId = nftCreateRx.tokenId.toString();
 
-      // Insert into SQLite
-      db.run(
-        `INSERT OR IGNORE INTO tokens 
-          (id, name, region, district, village, phone, serial, country, distribution_date, tokenId)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          token.id,
-          token.name,
-          token.region,
-          token.district,
-          token.village,
-          token.phone,
-          token.serial,
-          token.country,
-          token.distribution_date,
-          token.tokenId,
-        ],
-        (err) => {
-          if (err) {
-            console.error("DB insert error:", err.message);
+        // ✅ Prepare metadata
+        const tokenMeta = {
+          phone: row.phone,
+          serial: row.serial
+        };
+
+        // ✅ Mint the NFT
+        const mintTx = await new TokenMintTransaction()
+          .setTokenId(nftTokenId)
+          .setMetadata([Buffer.from(JSON.stringify(tokenMeta))])
+          .setMaxTransactionFee(new Hbar(10))
+          .freezeWith(client);
+
+        const mintTxSign = await mintTx.sign(supplykey);
+        const mintTxSubmit = await mintTxSign.execute(client);
+        await mintTxSubmit.getReceipt(client);
+        // ✅ Prepare metadata
+        const tokenData = {
+          id: row.id,
+          name: row.name,
+          region: row.region,
+          district: row.district,
+          village: row.village,
+          phone: row.phone,
+          serial: row.serial,
+          country: row.country,
+          distribution_date: row.distribution_date,
+          tokenId: nftTokenId,
+        };
+        // ✅ Save to memory and SQLite
+        createdTokens.push(tokenData);
+
+        db.run(
+          `INSERT OR IGNORE INTO tokens 
+            (id, name, region, district, village, phone, serial, country, distribution_date, tokenId, account)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            tokenData.id,
+            tokenData.name,
+            tokenData.region,
+            tokenData.district,
+            tokenData.village,
+            tokenData.phone,
+            tokenData.serial,
+            tokenData.country,
+            tokenData.distribution_date,
+            tokenData.tokenId,
+            treasuryId,
+          ],
+          (err) => {
+            if (err) console.error("DB insert error:", err.message);
           }
-        }
-      );
+        );
+      } catch (innerErr) {
+        console.error("Token creation error:", innerErr);
+      }
     });
 
     s3Stream.on("end", () => {
@@ -263,6 +322,7 @@ app.get("/tokens/create", async (req, res) => {
     res.status(500).json({ error: "Failed to create tokens" });
   }
 });
+
 
 // list all tokens put up for sale (from SQLite DB)
 app.get("/tokens/market", (req, res) => {
