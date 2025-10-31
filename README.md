@@ -36,6 +36,19 @@ This project demonstrates a **blockchain-backed solution** using Hedera:
 Tokens are **stored in SQLite**, while raw and processed data can be stored on **AWS S3**.
 
 ---
+Pitch Deck 
+
+https://docs.google.com/presentation/d/1XqwY-jUt651lJ0u_RnnKsCWawd7Yx2DxCPmRry4FoFw/edit?usp=sharing
+
+Certificates
+
+Andrew -  https://certs.hashgraphdev.com/c8ef1195-1976-44c0-b33c-6bd8a18bc752.pdf
+
+Azeite - https://certs.hashgraphdev.com/e9693ed4-2655-4c85-b28e-0e3064588e11.pdf
+
+Dalmas - https://certs.hashgraphdev.com/a80b3fea-6581-4fc3-85b6-8d57613b7cfb.pdf
+
+---
 
 ## Distributions Data
 
