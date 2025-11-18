@@ -96,3 +96,5 @@ if __name__ == "__main__":
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         s3_key = f"{OUTPUT_PREFIX}electricity_usage_{timestamp}.csv"
         write_df_to_s3(usage_df, BUCKET_NAME, s3_key)
+
+# scp -i ~/.ssh/hedera.pem /Users/dalmasotieno/Documents/UpEnergy/code/data-generator/tokens.db ubuntu@ec2-3-84-109-95.compute-1.amazonaws.com:~/carbon-forward-credit-api/tokens2.db
